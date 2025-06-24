@@ -1947,13 +1947,17 @@ mod tests {
         assert_eq!(4199, rc_last_block);
     }
 
-    
     #[test]
     fn test_prova() {
         let first_block_height = 0;
         let first_block_hash = BurnchainHeaderHash([0u8; 32]);
         let burn_chain = Burnchain::default_unittest(first_block_height, &first_block_hash);
 
-        burn_chain.connect_db(readwrite, first_block_header_hash, first_block_header_timestamp, epochs)
+        burn_chain.connect_db(
+            readwrite,
+            first_block_header_hash,
+            first_block_header_timestamp,
+            epochs,
+        )
     }
 }

@@ -1389,8 +1389,6 @@ impl BitcoinRegtestController {
         info!("FDF A");
 
         let _ = self.sortdb_mut();
-        
-
 
         let burn_chain_tip = self
             .burnchain_db
@@ -1400,15 +1398,12 @@ impl BitcoinRegtestController {
             .map_err(|_| BurnchainControllerError::BurnchainError)?;
         info!("FDF B");
 
-
         let estimated_fees = match previous_fees {
             Some(fees) => fees.fees_from_previous_tx(&payload, &self.config),
             None => LeaderBlockCommitFees::estimated_fees_from_payload(&payload, &self.config),
         };
 
         info!("FDF HERE!");
-
-        
 
         self.send_block_commit_operation_at_burnchain_height(
             epoch_id,
@@ -1443,8 +1438,6 @@ impl BitcoinRegtestController {
             utxos_to_exclude,
             burnchain_block_height,
         )?;
-
-
 
         // Serialize the payload
         let op_bytes = {
@@ -1525,7 +1518,7 @@ impl BitcoinRegtestController {
         signer: &mut BurnchainOpSigner,
         _attempt: u64,
     ) -> Result<Transaction, BurnchainControllerError> {
-         info!("FDF: BOOT");
+        info!("FDF: BOOT");
 
         // Are we currently tracking an operation?
         if self.ongoing_block_commit.is_none() || !self.allow_rbf {
@@ -1533,13 +1526,11 @@ impl BitcoinRegtestController {
             info!("FDF: Branch 1");
 
             let res =
-                self.send_block_commit_operation(
-                    epoch_id, payload, signer,
-                    None, None, None, &[]);
+                self.send_block_commit_operation(epoch_id, payload, signer, None, None, None, &[]);
             return res;
         }
 
-         info!("FDF: Branch 2");
+        info!("FDF: Branch 2");
 
         let ongoing_op = self.ongoing_block_commit.take().unwrap();
 
@@ -1693,16 +1684,18 @@ impl BitcoinRegtestController {
         } else {
             // if mock mining, do not even bother requesting UTXOs
             if self.config.node.mock_mining {
+                info!("FDF: Mock Mining NOUTXO");
                 return Err(BurnchainControllerError::NoUTXOs);
             }
 
             // Fetch some UTXOs
             let addr = self.get_miner_address(epoch_id, public_key);
-
-            return Err(BurnchainControllerError::NoUTXOs);
-
-
-
+            info!("FDF: GET UTXOS INPUT";
+                "epoch" => ?epoch_id,
+                "total_required" => total_required,
+                "utxos_to_exclude" => ?utxos_to_exclude,
+                "block_height" => block_height
+            );
             match self.get_utxos(
                 epoch_id,
                 public_key,
@@ -2599,11 +2592,12 @@ impl BitcoinRPCRequest {
             id: "stacks".to_string(),
             jsonrpc: "2.0".to_string(),
         };
-
+        info!("FDF: UN_1");
         let mut res = BitcoinRPCRequest::send(config, payload)?;
         let Some(res) = res.as_object_mut() else {
             return Err(RPCError::Parsing("Failed to get UTXOs".to_string()));
         };
+        info!("FDF: UN_2");
         let res = res
             .get("result")
             .ok_or(RPCError::Parsing("Failed to get bestblockhash".to_string()))?;
@@ -2615,6 +2609,7 @@ impl BitcoinRPCRequest {
         let max_conf = 9999999i64;
         let minimum_amount = ParsedUTXO::sat_to_serialized_btc(minimum_sum_amount);
 
+        info!("FDF: UN_3");
         let payload = BitcoinRPCRequest {
             method: "listunspent".to_string(),
             params: vec![
@@ -2639,12 +2634,14 @@ impl BitcoinRPCRequest {
             vec![]
         };
 
+        info!("FDF: UN_4");
         let mut utxos = vec![];
 
         match res.as_object_mut() {
             Some(ref mut object) => match object.get_mut("result") {
                 Some(serde_json::Value::Array(entries)) => {
                     while let Some(entry) = entries.pop() {
+                        info!("FDF: UN_5");
                         let parsed_utxo: ParsedUTXO = match serde_json::from_value(entry) {
                             Ok(utxo) => utxo,
                             Err(err) => {
@@ -2859,11 +2856,9 @@ mod tests {
     use stacks_common::util::hash::to_hex;
     use stacks_common::util::secp256k1::Secp256k1PrivateKey;
 
-    use crate::Keychain;
-
-    use crate::tests::bitcoin_regtest::BitcoinCoreController;
-
     use super::*;
+    use crate::tests::bitcoin_regtest::BitcoinCoreController;
+    use crate::Keychain;
 
     #[test]
     fn test_get_satoshis_per_byte() {
@@ -3040,26 +3035,112 @@ mod tests {
     }
 
     #[test]
-    fn test_preserve_utfo_chain() {
+    fn test_create_wallet() {
         let btc_miner_1_seed = vec![1, 1, 1, 1];
-        let btc_miner_1_pk = Keychain::default(btc_miner_1_seed.clone()).get_pub_key();    
+        let btc_miner_1_pk = Keychain::default(btc_miner_1_seed.clone()).get_pub_key();
         //let miner_sk = Secp256k1PrivateKey::random();
-       
-
 
         let mut config = Config::default();
         //config.burnchain.rpc
         config.burnchain.magic_bytes = "T3".as_bytes().into();
-        config.burnchain.local_mining_public_key = Some("04ee0b1602eb18fef7986887a7e8769a30c9df981d33c8380d255edef003abdcd243a0eb74afdf6740e6c423e62aec631519a24cf5b1d62bf8a3e06ddc695dcb77".to_string());
+        //config.burnchain.local_mining_public_key = Some("04ee0b1602eb18fef7986887a7e8769a30c9df981d33c8380d255edef003abdcd243a0eb74afdf6740e6c423e62aec631519a24cf5b1d62bf8a3e06ddc695dcb77".to_string());
+        config.burnchain.local_mining_public_key = Some(btc_miner_1_pk.to_hex());
+
+        //NOTE: Eventually if user/pass not set can use .cookie file
+        config.burnchain.username = Some("fdf".to_owned());
+        config.burnchain.password = Some("12345".to_owned());
 
         let mut btcd_controller = BitcoinCoreController::new(config.clone());
         btcd_controller.start_bitcoind().unwrap();
 
-        //config.burnchain.local_mining_public_key = Some(btc_miner_1_pk.to_hex());
+        let mut btc_controller = BitcoinRegtestController::new(config.clone(), None);
+        //let list = BitcoinRPCRequest::list_wallets(&config).unwrap();
 
-        
+        btc_controller.create_wallet_if_dne().unwrap();
+        /*
+        loop {
+            sleep_ms(5000);
+        }
+         */
+    }
+
+    #[test]
+    fn test_get_all_utxos() {
+        let btc_miner_1_seed = vec![1, 1, 1, 1];
+        let btc_miner_1_pk = Keychain::default(btc_miner_1_seed.clone()).get_pub_key();
+        //let miner_sk = Secp256k1PrivateKey::random();
+
+        let mut config = Config::default();
+        //config.burnchain.rpc
+        config.burnchain.magic_bytes = "T3".as_bytes().into();
+        //config.burnchain.local_mining_public_key = Some("04ee0b1602eb18fef7986887a7e8769a30c9df981d33c8380d255edef003abdcd243a0eb74afdf6740e6c423e62aec631519a24cf5b1d62bf8a3e06ddc695dcb77".to_string());
+        config.burnchain.local_mining_public_key = Some(btc_miner_1_pk.to_hex());
+
+        //NOTE: Eventually if user/pass not set can use .cookie file
+        config.burnchain.username = Some("fdf".to_owned());
+        config.burnchain.password = Some("12345".to_owned());
+
+        let mut btcd_controller = BitcoinCoreController::new(config.clone());
+        btcd_controller.start_bitcoind().unwrap();
+
+        let btc_controller = BitcoinRegtestController::new(config.clone(), None);
+        btc_controller.bootstrap_chain(101);
+
+        let utxos = btc_controller.get_all_utxos(&btc_miner_1_pk);
+        assert_eq!(1, utxos.len());
+    }
+
+    #[test]
+    //NOTE: STALL if block_height not exists....
+    fn test_get_utxos() {
+        let btc_miner_1_seed = vec![1, 1, 1, 1];
+        let btc_miner_1_pk = Keychain::default(btc_miner_1_seed.clone()).get_pub_key();
+        //let miner_sk = Secp256k1PrivateKey::random();
+
+        let mut config = Config::default();
+        //config.burnchain.rpc
+        config.burnchain.magic_bytes = "T3".as_bytes().into();
+        //config.burnchain.local_mining_public_key = Some("04ee0b1602eb18fef7986887a7e8769a30c9df981d33c8380d255edef003abdcd243a0eb74afdf6740e6c423e62aec631519a24cf5b1d62bf8a3e06ddc695dcb77".to_string());
+        config.burnchain.local_mining_public_key = Some(btc_miner_1_pk.to_hex());
+
+        //NOTE: Eventually if user/pass not set can use .cookie file
+        config.burnchain.username = Some("fdf".to_owned());
+        config.burnchain.password = Some("12345".to_owned());
+
+        let mut btcd_controller = BitcoinCoreController::new(config.clone());
+        btcd_controller.start_bitcoind().unwrap();
+
+        let btc_controller = BitcoinRegtestController::new(config.clone(), None);
+        btc_controller.bootstrap_chain(101);
+
+        let utxos =
+            btc_controller.get_utxos(StacksEpochId::Epoch31, &btc_miner_1_pk, 19000, None, 0);
+
+        assert!(utxos.is_some());
+
+        let uxto_set = utxos.unwrap();
+        assert_eq!(1, uxto_set.num_utxos());
+        assert_eq!(5000000000, uxto_set.total_available());
+        let utxo = &uxto_set.utxos[0];
+        assert_eq!(101, utxo.confirmations);
+    }
+
+    #[test]
+    fn test_preserve_utfo_chain() {
+        let btc_miner_1_seed = vec![1, 1, 1, 1];
+        let keychain = Keychain::default(btc_miner_1_seed.clone());
+        let btc_miner_1_pk = keychain.get_pub_key();
+
+        let mut config = Config::default();
+        config.burnchain.magic_bytes = "T3".as_bytes().into();
+        config.burnchain.local_mining_public_key = Some(btc_miner_1_pk.to_hex());
+        config.burnchain.username = Some("fdf".to_owned());
+        config.burnchain.password = Some("12345".to_owned());
+
+        let mut btcd_controller = BitcoinCoreController::new(config.clone());
+        btcd_controller.start_bitcoind().unwrap();
+
         let mut btc_controller = BitcoinRegtestController::new(config, None);
-        
 
         /*
         let btc_miner_addr = btc_controller.get_miner_address(StacksEpochId::Epoch31, &btc_miner_1_pk);
@@ -3067,28 +3148,42 @@ mod tests {
         btc_controller.build_next_block(1);
         */
 
-        btc_controller.bootstrap_chain(1);
+        btc_controller.bootstrap_chain(101);
 
-        let header = btc_controller.get_block_hash(1);
+        let header = btc_controller.get_block_hash(101);
         info!("{:?}", header);
+        /*
+               loop {
+                   sleep_ms(5000);
+               }
+        */
+        //return;
 
-
-        return;
-        
-       
         btc_controller.connect_dbs().expect("FDF error");
 
+        let tip = btc_controller
+            .get_burnchain()
+            .open_burnchain_db(false)
+            .unwrap()
+            .get_canonical_chain_tip();
+        info!("===========================");
+        info!("===========================");
+        info!("{:?}", tip);
+        info!("===========================");
+        info!("===========================");
 
+        let mut signer = keychain.generate_op_signer();
+        /*
+        let mut signer = BurnchainOpSigner::new(
+                Secp256k1PrivateKey::from_hex(
+                    "9e446f6b0c6a96cf2190e54bcd5a8569c3e386f091605499464389b8d4e0bfc201",
+                )
+                .unwrap(),
+                false,
+            );
+        */
 
-    let mut signer = BurnchainOpSigner::new(
-            Secp256k1PrivateKey::from_hex(
-                "9e446f6b0c6a96cf2190e54bcd5a8569c3e386f091605499464389b8d4e0bfc201",
-            )
-            .unwrap(),
-            false,
-        );
-
-    let commit_op = LeaderBlockCommitOp {
+        let commit_op = LeaderBlockCommitOp {
             block_header_hash: BlockHeaderHash::from_hex(
                 "e88c3d30cb59a142f83de3b27f897a43bbb0f13316911bb98a3229973dae32af",
             )
@@ -3118,37 +3213,39 @@ mod tests {
 
             txid: Txid([0x00; 32]),
             vtxindex: 0,
-            block_height: 2212,
+            block_height: 2212, //FDF
             burn_header_hash: BurnchainHeaderHash([0x01; 32]),
         };
 
+        let tx = btc_controller
+            .build_leader_block_commit_tx(StacksEpochId::Epoch31, commit_op, &mut signer, 0)
+            .expect("Build leader block commit should work");
+
+        //assert_eq!("", tx.txid().to_string());
+
+        assert_eq!(1, tx.version);
+        assert_eq!(0, tx.lock_time);
+        assert_eq!(1, tx.input.len());
+        assert_eq!(4, tx.output.len());
+
+        /*
+               let first_block_height = 0;
+               let first_block_hash = BurnchainHeaderHash([0u8; 32]);
+
+               //let burnchain = Burnchain::default_unittest(first_block_height, &first_block_hash);
+               let mut burnchain = Burnchain::regtest(":memory:");
+
+               BurnchainDB::connect(":memory:", &burnchain, true).expect("FDF: Works?");
+
+               burnchain.pox_constants = PoxConstants::regtest_default();
+               burnchain.first_block_height = first_block_height;
+               burnchain.first_block_hash = first_block_hash;
+               burnchain.first_block_timestamp = 0;
 
 
-        btc_controller.build_leader_block_commit_tx(
-            StacksEpochId::Epoch31,
-            commit_op,
-            &mut signer,
-            0).expect("Boh");
+               btc_controller.burnchain_config = Some(burnchain);
 
-
-       /*
-        let first_block_height = 0;
-        let first_block_hash = BurnchainHeaderHash([0u8; 32]);
-        
-        //let burnchain = Burnchain::default_unittest(first_block_height, &first_block_hash);
-        let mut burnchain = Burnchain::regtest(":memory:");
-       
-        BurnchainDB::connect(":memory:", &burnchain, true).expect("FDF: Works?");
-
-        burnchain.pox_constants = PoxConstants::regtest_default();
-        burnchain.first_block_height = first_block_height;
-        burnchain.first_block_hash = first_block_hash;
-        burnchain.first_block_timestamp = 0;
-
-
-        btc_controller.burnchain_config = Some(burnchain);
-
-        //let _ = btc_controller.sortdb_mut();
- */
+               //let _ = btc_controller.sortdb_mut();
+        */
     }
 }
