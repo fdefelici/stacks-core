@@ -1386,17 +1386,29 @@ impl BitcoinRegtestController {
         previous_fees: Option<LeaderBlockCommitFees>,
         previous_txids: &[Txid],
     ) -> Result<Transaction, BurnchainControllerError> {
+        info!("FDF A");
+
         let _ = self.sortdb_mut();
+        
+
+
         let burn_chain_tip = self
             .burnchain_db
             .as_ref()
             .ok_or(BurnchainControllerError::BurnchainError)?
             .get_canonical_chain_tip()
             .map_err(|_| BurnchainControllerError::BurnchainError)?;
+        info!("FDF B");
+
+
         let estimated_fees = match previous_fees {
             Some(fees) => fees.fees_from_previous_tx(&payload, &self.config),
             None => LeaderBlockCommitFees::estimated_fees_from_payload(&payload, &self.config),
         };
+
+        info!("FDF HERE!");
+
+        
 
         self.send_block_commit_operation_at_burnchain_height(
             epoch_id,
@@ -1431,6 +1443,8 @@ impl BitcoinRegtestController {
             utxos_to_exclude,
             burnchain_block_height,
         )?;
+
+
 
         // Serialize the payload
         let op_bytes = {
@@ -1511,13 +1525,21 @@ impl BitcoinRegtestController {
         signer: &mut BurnchainOpSigner,
         _attempt: u64,
     ) -> Result<Transaction, BurnchainControllerError> {
+         info!("FDF: BOOT");
+
         // Are we currently tracking an operation?
         if self.ongoing_block_commit.is_none() || !self.allow_rbf {
             // Good to go, let's build the transaction and send it.
+            info!("FDF: Branch 1");
+
             let res =
-                self.send_block_commit_operation(epoch_id, payload, signer, None, None, None, &[]);
+                self.send_block_commit_operation(
+                    epoch_id, payload, signer,
+                    None, None, None, &[]);
             return res;
         }
+
+         info!("FDF: Branch 2");
 
         let ongoing_op = self.ongoing_block_commit.take().unwrap();
 
@@ -1676,6 +1698,11 @@ impl BitcoinRegtestController {
 
             // Fetch some UTXOs
             let addr = self.get_miner_address(epoch_id, public_key);
+
+            return Err(BurnchainControllerError::NoUTXOs);
+
+
+
             match self.get_utxos(
                 epoch_id,
                 public_key,
@@ -2832,6 +2859,10 @@ mod tests {
     use stacks_common::util::hash::to_hex;
     use stacks_common::util::secp256k1::Secp256k1PrivateKey;
 
+    use crate::Keychain;
+
+    use crate::tests::bitcoin_regtest::BitcoinCoreController;
+
     use super::*;
 
     #[test]
@@ -3006,5 +3037,118 @@ mod tests {
         assert_eq!(block_commit.output[3].value, 323507);
 
         assert_eq!(&SerializedTx::new(block_commit).to_hex(), "0100000002eeda098987728e4a2e21b34b74000dcb0bd0e4d20e55735492ec3cba3afbead3030000006a4730440220558286e20e10ce31537f0625dae5cc62fac7961b9d2cf272c990de96323d7e2502202255adbea3d2e0509b80c5d8a3a4fe6397a87bcf18da1852740d5267d89a0cb20121035379aa40c02890d253cfa577964116eb5295570ae9f7287cbae5f2585f5b2c7cfdffffff243b0b329a5889ab8801b315eea19810848d4c2133e0245671cc984a2d2f1301000000006a47304402206d9f8de107f9e1eb15aafac66c2bb34331a7523260b30e18779257e367048d34022013c7dabb32a5c281aa00d405e2ccbd00f34f03a65b2336553a4acd6c52c251ef0121035379aa40c02890d253cfa577964116eb5295570ae9f7287cbae5f2585f5b2c7cfdffffff040000000000000000536a4c5054335be88c3d30cb59a142f83de3b27f897a43bbb0f13316911bb98a3229973dae32afd5b9f21bc1f40f24e2c101ecd13c55b8619e5e03dad81de2c62a1cc1d8c1b375000008a300010000059800015a10270000000000001976a914000000000000000000000000000000000000000088ac10270000000000001976a914000000000000000000000000000000000000000088acb3ef0400000000001976a9141dc27eba0247f8cc9575e7d45e50a0bc7e72427d88ac00000000");
+    }
+
+    #[test]
+    fn test_preserve_utfo_chain() {
+        let btc_miner_1_seed = vec![1, 1, 1, 1];
+        let btc_miner_1_pk = Keychain::default(btc_miner_1_seed.clone()).get_pub_key();    
+        //let miner_sk = Secp256k1PrivateKey::random();
+       
+
+
+        let mut config = Config::default();
+        //config.burnchain.rpc
+        config.burnchain.magic_bytes = "T3".as_bytes().into();
+        config.burnchain.local_mining_public_key = Some("04ee0b1602eb18fef7986887a7e8769a30c9df981d33c8380d255edef003abdcd243a0eb74afdf6740e6c423e62aec631519a24cf5b1d62bf8a3e06ddc695dcb77".to_string());
+
+        let mut btcd_controller = BitcoinCoreController::new(config.clone());
+        btcd_controller.start_bitcoind().unwrap();
+
+        //config.burnchain.local_mining_public_key = Some(btc_miner_1_pk.to_hex());
+
+        
+        let mut btc_controller = BitcoinRegtestController::new(config, None);
+        
+
+        /*
+        let btc_miner_addr = btc_controller.get_miner_address(StacksEpochId::Epoch31, &btc_miner_1_pk);
+        info!("Miner Addr: {:?}", btc_miner_addr);
+        btc_controller.build_next_block(1);
+        */
+
+        btc_controller.bootstrap_chain(1);
+
+        let header = btc_controller.get_block_hash(1);
+        info!("{:?}", header);
+
+
+        return;
+        
+       
+        btc_controller.connect_dbs().expect("FDF error");
+
+
+
+    let mut signer = BurnchainOpSigner::new(
+            Secp256k1PrivateKey::from_hex(
+                "9e446f6b0c6a96cf2190e54bcd5a8569c3e386f091605499464389b8d4e0bfc201",
+            )
+            .unwrap(),
+            false,
+        );
+
+    let commit_op = LeaderBlockCommitOp {
+            block_header_hash: BlockHeaderHash::from_hex(
+                "e88c3d30cb59a142f83de3b27f897a43bbb0f13316911bb98a3229973dae32af",
+            )
+            .unwrap(),
+            new_seed: VRFSeed::from_hex(
+                "d5b9f21bc1f40f24e2c101ecd13c55b8619e5e03dad81de2c62a1cc1d8c1b375",
+            )
+            .unwrap(),
+            parent_block_ptr: 2211, // 0x000008a3
+            parent_vtxindex: 1,     // 0x0001
+            key_block_ptr: 1432,    // 0x00000598
+            key_vtxindex: 1,        // 0x0001
+            memo: vec![11],         // 0x5a >> 3
+
+            burn_fee: 0,
+            input: (Txid([0x00; 32]), 0),
+            burn_parent_modulus: 2, // 0x5a & 0b111
+
+            apparent_sender: BurnchainSigner("mgbpit8FvkVJ9kuXY8QSM5P7eibnhcEMBk".to_string()),
+            commit_outs: vec![
+                PoxAddress::Standard(StacksAddress::burn_address(false), None),
+                PoxAddress::Standard(StacksAddress::burn_address(false), None),
+            ],
+
+            treatment: vec![],
+            sunset_burn: 0,
+
+            txid: Txid([0x00; 32]),
+            vtxindex: 0,
+            block_height: 2212,
+            burn_header_hash: BurnchainHeaderHash([0x01; 32]),
+        };
+
+
+
+        btc_controller.build_leader_block_commit_tx(
+            StacksEpochId::Epoch31,
+            commit_op,
+            &mut signer,
+            0).expect("Boh");
+
+
+       /*
+        let first_block_height = 0;
+        let first_block_hash = BurnchainHeaderHash([0u8; 32]);
+        
+        //let burnchain = Burnchain::default_unittest(first_block_height, &first_block_hash);
+        let mut burnchain = Burnchain::regtest(":memory:");
+       
+        BurnchainDB::connect(":memory:", &burnchain, true).expect("FDF: Works?");
+
+        burnchain.pox_constants = PoxConstants::regtest_default();
+        burnchain.first_block_height = first_block_height;
+        burnchain.first_block_hash = first_block_hash;
+        burnchain.first_block_timestamp = 0;
+
+
+        btc_controller.burnchain_config = Some(burnchain);
+
+        //let _ = btc_controller.sortdb_mut();
+ */
     }
 }

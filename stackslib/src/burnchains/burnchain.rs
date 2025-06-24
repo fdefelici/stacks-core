@@ -632,7 +632,7 @@ impl Burnchain {
         ret
     }
 
-    #[cfg(test)]
+    //#[cfg(any(test, feature = "testing"))]
     pub fn default_unittest(
         first_block_height: u64,
         first_block_hash: &BurnchainHeaderHash,
@@ -792,8 +792,11 @@ impl Burnchain {
 
     /// Open the burn databases.  They must already exist.
     pub fn open_db(&self, readwrite: bool) -> Result<(SortitionDB, BurnchainDB), burnchain_error> {
+        info!("FDF1");
         let burn_db = self.open_burnchain_db(readwrite)?;
+        info!("FDF2");
         let sort_db = self.open_sortition_db(readwrite)?;
+        info!("FDF3");
         Ok((sort_db, burn_db))
     }
 
@@ -1942,5 +1945,15 @@ mod tests {
         let rc_last_block = burn_chain.nakamoto_last_block_of_cycle(rc);
         assert_eq!(2100, rc_first_block);
         assert_eq!(4199, rc_last_block);
+    }
+
+    
+    #[test]
+    fn test_prova() {
+        let first_block_height = 0;
+        let first_block_hash = BurnchainHeaderHash([0u8; 32]);
+        let burn_chain = Burnchain::default_unittest(first_block_height, &first_block_hash);
+
+        burn_chain.connect_db(readwrite, first_block_header_hash, first_block_header_timestamp, epochs)
     }
 }
